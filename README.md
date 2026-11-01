@@ -121,7 +121,7 @@ in step 8.
 There are two ways to restore the `.unf` file:
 
 - **During setup:** the setup wizard on the new server offers to restore from a backup.
-- **After setup:** in the Network application, go to Settings → System → Backups → **Restore** and upload the file.
+- **After setup:** in the Network application, go to Settings → Control Plane → Backups → **Upload & Restore** and upload the file.
 
 The restore brings across the sites, settings and the list of adopted devices, including the keys that the
 devices use to authenticate to the controller. That's why the devices don't need to be reset.
