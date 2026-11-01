@@ -1,0 +1,117 @@
+# UniFi OS Server, using Ubiquiti's own container image only.
+#
+# The settings mirror what Ubiquiti's launcher (`uosserver`) passes to `podman run`:
+# --privileged --systemd=always, the environment variables below, and the persistent
+# volumes /data and /persistent plus those listed in the installer's mounts.json.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unifi
+  labels:
+    app.kubernetes.io/name: unifi-os-server
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: unifi-os-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: unifi-os-server
+    spec:
+      hostname: unifi
+      # systemd shuts down cleanly on SIGRTMIN+3 (see preStop), give MongoDB time to stop
+      terminationGracePeriodSeconds: 120
+      initContainers:
+        # Podman fills a new named volume with the image's content and ownership; Kubernetes doesn't.
+        # Do the same once per volume (marker file), without overwriting anything already there.
+        # Without this, MongoDB fails with "Attempted to create a lock file on a read-only directory".
+        - name: seed-volumes
+          image: uosserver
+          command:
+            - /bin/bash
+            - -ec
+            - |
+              seed() { # image-path volume-dir
+                mkdir -p "$2"
+                [ -e "$2/.seeded" ] && return 0
+                if [ -d "$1" ]; then
+                  cp -an "$1/." "$2/"
+                  chown --reference="$1" "$2"; chmod --reference="$1" "$2"
+                fi
+                touch "$2/.seeded"; echo "seeded $2 from $1"
+              }
+              seed /data              /vol/data/data
+              seed /persistent        /vol/data/persistent
+              seed /var/lib/unifi     /vol/data/unifi
+              seed /etc/rabbitmq/ssl  /vol/data/rabbitmq-ssl
+              seed /var/lib/mongodb   /vol/mongo
+          volumeMounts:
+            - { name: data, mountPath: /vol/data }
+            - { name: mongo, mountPath: /vol/mongo }
+      containers:
+        - name: unifi
+          image: uosserver
+          securityContext:
+            privileged: true
+          envFrom:
+            # APP_VERSION, UOS_UUID (config.env)
+            - configMapRef:
+                name: unifi-os-server
+          env:
+            - name: container
+              value: podman
+            - name: APP_MODEL
+              value: UOSSERVER
+            - name: PRODUCT_NAME
+              value: UniFi OS Server
+            - name: FIRMWARE_PLATFORM
+              value: linux-x64
+          ports:
+            - { name: https, containerPort: 443, protocol: TCP }
+            - { name: inform, containerPort: 8080, protocol: TCP }
+            - { name: speedtest, containerPort: 6789, protocol: TCP }
+            - { name: stun, containerPort: 3478, protocol: UDP }
+            - { name: syslog, containerPort: 5514, protocol: UDP }
+            - { name: discovery, containerPort: 10003, protocol: UDP }
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "kill -s RTMIN+3 1"]
+          startupProbe:
+            httpGet: { path: /api/ping, port: 80 }
+            periodSeconds: 15
+            failureThreshold: 60 # up to 15 minutes for the first start
+          livenessProbe:
+            httpGet: { path: /api/ping, port: 80 }
+            periodSeconds: 60
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet: { path: /api/ping, port: 80 }
+            periodSeconds: 15
+            timeoutSeconds: 5
+          resources:
+            requests: { cpu: 500m, memory: 2Gi }
+            limits: { memory: 6Gi }
+          volumeMounts:
+            # tmpfs mounts podman adds for --systemd=always
+            - { name: run, mountPath: /run }
+            - { name: run-lock, mountPath: /run/lock }
+            - { name: tmp, mountPath: /tmp }
+            - { name: journal, mountPath: /var/log/journal }
+            # persistent paths (launcher volumes + installer mounts.json)
+            - { name: data, mountPath: /data, subPath: data }
+            - { name: data, mountPath: /persistent, subPath: persistent }
+            - { name: data, mountPath: /var/lib/unifi, subPath: unifi }
+            - { name: data, mountPath: /etc/rabbitmq/ssl, subPath: rabbitmq-ssl }
+            - { name: mongo, mountPath: /var/lib/mongodb }
+      volumes:
+        - { name: run, emptyDir: { medium: Memory } }
+        - { name: run-lock, emptyDir: { medium: Memory } }
+        - { name: tmp, emptyDir: { medium: Memory } }
+        - { name: journal, emptyDir: { medium: Memory } }
+        - { name: data, persistentVolumeClaim: { claimName: unifi-data } }
+        - { name: mongo, persistentVolumeClaim: { claimName: unifi-mongo } }

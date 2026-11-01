@@ -1,0 +1,9 @@
+# UniFi OS runs systemd in a privileged container, so the namespace must allow privileged pods.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: unifi
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged
+    pod-security.kubernetes.io/audit: privileged

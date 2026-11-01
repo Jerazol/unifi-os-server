@@ -1,0 +1,21 @@
+# Devices must reach the controller directly on these ports, so it needs its own IP rather than
+# an HTTP ingress. To pin the IP, use your LoadBalancer implementation's mechanism, for example
+#   MetalLB: annotation  metallb.universe.tf/loadBalancerIPs: 192.0.2.10
+#   Cilium:  annotation  lbipam.cilium.io/ips: 192.0.2.10
+apiVersion: v1
+kind: Service
+metadata:
+  name: unifi
+spec:
+  type: LoadBalancer
+  # keep the devices' real source IPs
+  externalTrafficPolicy: Local
+  selector:
+    app.kubernetes.io/name: unifi-os-server
+  ports:
+    - { name: https, port: 443, targetPort: https, protocol: TCP }        # web UI and API
+    - { name: inform, port: 8080, targetPort: inform, protocol: TCP }     # device inform
+    - { name: speedtest, port: 6789, targetPort: speedtest, protocol: TCP } # mobile speed test
+    - { name: stun, port: 3478, targetPort: stun, protocol: UDP }         # STUN
+    - { name: syslog, port: 5514, targetPort: syslog, protocol: UDP }     # remote syslog
+    - { name: discovery, port: 10003, targetPort: discovery, protocol: UDP } # device discovery

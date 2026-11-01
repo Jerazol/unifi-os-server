@@ -1,0 +1,4 @@
+# output of extract-image.sh and downloaded installers
+uos-*/
+*-linux-x64-*
+*-linux-arm64-*

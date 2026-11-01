@@ -1,0 +1,21 @@
+# Uses the cluster's default StorageClass. Set storageClassName (or bind to your own PersistentVolumes
+# with volumeName) if needed. Use block or local storage: MongoDB does not work reliably on NFS.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: unifi-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: unifi-mongo
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
